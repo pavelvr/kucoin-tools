@@ -10,7 +10,7 @@
         function ajax(url, callback, data, x) {
                 try {
                     x = x || new(this.XMLHttpRequest || ActiveXObject)('MSXML2.XMLHTTP.3.0');
-                    //x.withCredentials = true;
+                    x.withCredentials = true;
                     x.open(data ? 'POST' : 'GET', url, 1);
                     x.timeout = 0;
                     x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
@@ -26,7 +26,7 @@
             function jsonAjax(url, callback, data, x) {
                 try {
                     x = x || new(this.XMLHttpRequest || ActiveXObject)('MSXML2.XMLHTTP.3.0');
-                    //x.withCredentials = true;
+                    x.withCredentials = true;
                     x.open(data ? 'POST' : 'GET', url, 1);
                     x.timeout = 0;
                     x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
