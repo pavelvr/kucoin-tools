@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>KuCoin Prices Monitor</title>
+    <script>
+
+        function ajax(url, callback, data, x) {
+                try {
+                    x = x || new(this.XMLHttpRequest || ActiveXObject)('MSXML2.XMLHTTP.3.0');
+                    x.open(data ? 'POST' : 'GET', url, 1);
+                    x.timeout = 0;
+                    x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+                    x.onreadystatechange = function () {
+                        x.readyState > 3 && callback && callback(x.responseText, x);
+                    };
+                    x.send(data);
+                } catch (e) {
+                    window.console && console.log(e);
+                }
+            };
+            function jsonAjax(url, callback, data, x) {
+                try {
+                    x = x || new(this.XMLHttpRequest || ActiveXObject)('MSXML2.XMLHTTP.3.0');
+                    x.open(data ? 'POST' : 'GET', url, 1);
+                    x.timeout = 0;
+                    x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    x.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+                    x.setRequestHeader('Accept', 'application/json');
+                    x.onreadystatechange = function () {
+                        x.readyState > 3 && callback && callback(x.response, x);
+                    };
+                    x.send(data);
+                } catch (e) {
+                    window.console && console.log(e);
+                }
+            };
+        function getFromAPI(url, callback) {
+            // console.log(url);
+            jsonAjax(url, function(response, xhr) {
+                console.log(xhr.status);
+                callback(response);
+            });
+            
+        }
+    </script>
+    <style>
+        body { padding: 1em; background-color: #f9f9f9; font-family: sans-serif; color: #4a4a4a; }
+        h1, h2, h3 { font-family: serif; }
+        h1 { font-size: 1.6em; }
+        h2 { font-size: 1.3em; }
+        button { position: absolute; top: 10px; right: 10px; color: green; background-color: #f6f6f6; border: solid 1px #ededed; }
+        button:hover { background-color: #ffffff; }
+        table { border: solid 1px #4a4a4a; width: 90%; position: relative; top: -15px; }
+        th { background-color: #4a4a4a; color: #f6f6f6; font-weight: normal; font-family: serif; }
+        tbody tr:nth-child(even) { background-color: #ededed; }
+        tbody tr td:nth-child(3), tbody tr td:nth-child(4), tbody tr td:nth-child(5) { text-align: right; }
+        tbody tr td:nth-child(6), tbody tr td:nth-child(7), tbody tr td:nth-child(8) { text-align: center; }
+        p#filter { float: right; position: relative; top: -15px; right: 10%; }
+        dt, dd { width: 120px; margin-bottom: 10px; padding: 4px; text-align: right; }
+        dt { float: left; background-color: #4a4a4a; color: #f6f6f6; }
+        dd { margin-left: 130px; border-bottom: 1px solid #4a4a4a; white-space: pre; width: 200px;}
+        input[type=text] { width: 400px; padding: 5px; font-size: 1.2em; }
+        input[type=button] { padding: 5px; font-size: 1.2em;}
+        .auto-enabled { color: green; }
+    </style>
+</head>
+<body>
+    <p><button id="refresh-button">Refresh</button></p>
+
+    <div>
+        <p>
+            <input type="text" id="pairs-list" placeholder="Comma separated pairs..." value="btc/usdt,kcs/usdt,klv/usdt,pol/usdt,dash/usdt,algo/usdt,nwc/usdt,orai/usdt,ltx/usdt">
+            <input type="button" id="update-prices-button" value="Update Prices">
+            <input type="button" id="auto-update-prices-button" value="Auto (60s)">
+        </p>
+        <dl id="pairs-prices">
+
+        </dl>
+    </div>
+    <!-- 
+    <h1>KuCoin Currencies Datasheet</h1>
+    <h2>Summary</h2>
+    <p><strong>Listed Coins/Tokens</strong>: <span id="listed-projects">0</span> | <strong>Enable for Deposit:</strong> <span id="depositable">0</span> | <strong>Enable for Withdrawal:</strong> <span id="withdrawable">0</span></p>
+    
+    <p id="filter"><input type="text" placeholder="Filter by Name or Ticker" /></p>
+    <h2>Currencies Datasheet</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Ticker</th>
+                <th>Confirms</th>
+                <th>Withdrawal Min.</th>
+                <th>Withdrawal Fee</th>
+                <th>Deposit</th>
+                <th>Withdrawal</th>
+                <th>Margin</th>
+            </tr>
+        </thead>
+        <tbody id="datasheet">
+
+        </tbody>
+    </table>
+    -->
+    <script>
+        var apiServer       = 'https://api.kucoin.io',
+            currenciesUrl   = apiServer + '/api/v1/currencies',
+            marketUrl       = apiServer + '/api/v1/market/orderbook/level1?symbol=',
+            DATA            = {},
+            
+            refreshButtonNode= document.getElementById("refresh-button"),
+            updatePricesButtonNode  = document.getElementById("update-prices-button"),
+            autoUpdatePricesButton = document.getElementById('auto-update-prices-button'),
+            pairsListNode   = document.getElementById("pairs-list"),
+            autoUpdatePricesIntervalHandler = undefined;
+            //filterNode       = document.getElementById("filter");
+
+        function percent(part, total, precision) {
+            return (part / total * 100).toFixed(precision || 2);
+        }
+        function boolToYesNo(boolValue) {
+            return boolValue ? 'Yes' : 'No';
+        }
+        function fillLeftWithZeros(value, howManyPlaces) {
+            var howManyPlaces = howManyPlaces || 2;
+            return  ('00000' + value.toString()).substr(5 + value.toString().length - howManyPlaces);
+        }
+        function timeFromEpoch(epoch) {
+            var date = new Date(epoch);
+            return fillLeftWithZeros(date.getHours()) + ':' +
+                fillLeftWithZeros(date.getMinutes()) + ':' +
+                fillLeftWithZeros(date.getSeconds());
+        }
+
+        function toggleAutoUpdate() {
+            var enabled = autoUpdatePricesIntervalHandler !== undefined ? true : false;
+            if (enabled === true) {
+                autoUpdatePricesButton.classList.remove('auto-enabled');
+                window.clearInterval(autoUpdatePricesIntervalHandler);
+                autoUpdatePricesIntervalHandler = undefined;
+                updatePricesButtonNode.removeAttribute('disabled');
+            } else {
+                autoUpdatePricesButton.classList.add('auto-enabled');
+                updatePricesButtonNode.setAttribute('disabled', 'disabled');
+                autoUpdatePricesIntervalHandler = window.setInterval(updatePricesData, 60 * 1000);
+            }
+        }
+        function updatePricesData() {
+            var markets = pairsListNode.value
+                            .split(',')
+                            .map(v => v.trim().toUpperCase().replace(/\//, '-'))
+
+                pairsInfoNode = document.getElementById('pairs-prices'),
+
+                updatePriceNode = function(pair) {
+                    var nodeId = 'pair-' + pair.toLowerCase(),
+                        pairInfoUrl = marketUrl + pair;
+                        
+                    getFromAPI(pairInfoUrl, jsonResponse => {
+                        DATA = JSON.parse(jsonResponse).data;
+                        document.getElementById(nodeId).innerHTML = DATA.price +
+                            ' (' + timeFromEpoch(DATA.time) + ')';
+                    });
+                };
+            
+            pairsInfoNode.innerHTML = markets
+                .map(pair =>
+                    '<dt>'+ pair.replace(/\-/, '/') +
+                    '</dt><dd id="pair-'+ pair.toLowerCase() +'">&nbsp;</dd>')
+                .join('\n');
+
+            markets.forEach(pair => updatePriceNode(pair));
+        }
+        /*
+        function currenciesDataProcessor(jsonResponse) {
+            DATA = JSON.parse(jsonResponse).data;
+            DATA.sort(function(currencyA, currencyB) {
+                return currencyA.currency.toLowerCase() < currencyB.currency.toLowerCase()
+                    ? -1
+                    : 1;
+            });
+            updateData(DATA);
+        }
+        function updateData(data) {
+            var listedProjets           = DATA.length,
+                depositable             = DATA.filter(function(currency) { return currency.isDepositEnabled; }).length,
+                withdrawable            = DATA.filter(function(currency) { return currency.isWithdrawEnabled; }).length,
+
+                listedProjetsNode       = document.getElementById("listed-projects"),
+                depositableNode         = document.getElementById("depositable"),
+                withdrawableNode        = document.getElementById("withdrawable"),
+                datasheetTableBody      = document.getElementById("datasheet");
+
+            listedProjetsNode.innerHTML = listedProjets;
+            depositableNode.innerHTML   = depositable + ' (' + percent(depositable, listedProjets) + '%)';
+            withdrawableNode.innerHTML  = depositable + ' (' + percent(withdrawable, listedProjets) + '%)';
+
+            datasheetTableBody.innerHTML= data
+                .map(function(currency) {
+                    return '<tr>'
+                        + '<td>' + currency.fullName + '</td>'
+                        + '<td>' + currency.currency + '</td>'
+                        + '<td>' + currency.confirms + '</td>'
+                        + '<td>' + currency.withdrawalMinSize + '</td>'
+                        + '<td>' + currency.withdrawalMinFee + '</td>'
+                        + '<td>' + boolToYesNo(currency.isDepositEnabled) + '</td>'
+                        + '<td>' + boolToYesNo(currency.isWithdrawEnabled) + '</td>'
+                        + '<td>' + boolToYesNo(currency.isMarginEnabled) + '</td>'
+                        + '</tr>';
+                })
+                .join('\n');
+        }
+        getFromAPI(currenciesUrl, currenciesDataProcessor);
+        //*/
+
+        refreshButtonNode.addEventListener("click", function(evt) {
+            window.location.reload();
+        });
+        updatePricesButtonNode.addEventListener("click", function(evt) {
+            updatePricesData();
+        });
+        autoUpdatePricesButton.addEventListener("click", function(evt) {
+            toggleAutoUpdate();
+        });
+        /*
+        filterNode.addEventListener("keyup", function(evt) {
+            var _filter = evt.target.value.toLowerCase().trim();
+            if (_filter.length === 0) {
+                updateData(DATA);
+            } else {
+                var tempData = DATA.map(function(currency) { return currency; }); // hardcopying DATA
+                updateData(tempData.filter(function(currency) {
+                    return currency.fullName.toLowerCase().includes(_filter) || currency.currency.toLowerCase().includes(_filter);
+                }));
+            }
+        });
+        //*/
+    </script>
+    <!-- 
+        {
+            "currency": "USDT",
+            "name": "USDT",
+            "fullName": "Tether",
+            "precision": 8,
+            "confirms": 12,
+            "withdrawalMinSize": "10",
+            "withdrawalMinFee": "4",
+            "isWithdrawEnabled": true,
+            "isDepositEnabled": true,
+            "isMarginEnabled": true,
+            "isDebitEnabled": true
+        }
+     -->
+</body>
+</html>
